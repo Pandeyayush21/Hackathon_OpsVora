@@ -1,0 +1,14 @@
+<svg width="300" height="64" viewBox="0 0 300 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(8, 8)">
+    <svg width="52" height="52" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M4 8C4 5.79086 5.79086 4 8 4H24C26.2091 4 28 5.79086 28 8V24C28 26.2091 26.2091 28 24 28H8C5.79086 28 4 26.2091 4 24V8Z" fill="#18181B"/>
+  <path d="M28 8C28 5.79086 26.2091 4 24 4H20L28 12V8Z" fill="#F59E0B"/>
+  <path d="M8 16C8 12.6863 10.6863 10 14 10C15.0609 10 16.0783 10.2654 17 10.7542V14H14C12.8954 14 12 14.8954 12 16C12 17.1046 12.8954 18 14 18H17V21.2458C16.0783 21.7346 15.0609 22 14 22C10.6863 22 8 19.3137 8 16Z" fill="white"/>
+  <path d="M18 10H20L24 22H22L20.5 17.5H17.5L18 10Z" fill="white"/>
+  <path d="M19 14L20 18H18.5L19 14Z" fill="#F59E0B" opacity="0.3"/>
+</svg>
+  </g>
+  
+  <text x="68" y="40" font-family="system-ui, -apple-system, sans-serif" font-size="36" font-weight="300" fill="rgba(24, 24, 27, 0.5)" letter-spacing="-0.02em">Ops</text>
+  <text x="133" y="40" font-family="system-ui, -apple-system, sans-serif" font-size="36" font-weight="700" fill="#18181B" letter-spacing="-0.02em">Vora</text>
+</svg>
