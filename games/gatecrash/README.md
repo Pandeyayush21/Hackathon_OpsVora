@@ -1,6 +1,6 @@
 # Gatecrash
 
-A crowd-battle game. Hold and drag to aim a cannon that fires runners up a causeway. Gates multiply the runners that pass through (×2, ×3, ×4) or knock half of them out (÷2). Your runners clash one-for-one with the enemy crowd. Whatever gets through damages the enemy tower, and you win when it falls. If enemies reach your gatehouse, they damage it.
+A crowd-battle game. Hold and drag to aim a cannon that fires runners up a causeway. Gates multiply the runners that pass through (×2, ×3, ×4). Barricades (from level 2) are crate stacks with a number that soak up runners until broken, and always guard a bigger gate, so you choose between going around and punching through. Your runners clash one-for-one with the enemy crowd. Whatever gets through damages the enemy tower, and you win when it falls. If enemies reach your gatehouse, they damage it.
 
 One HTML file with no dependencies. Open `index.html` in a browser, or serve the folder.
 
@@ -10,6 +10,7 @@ One HTML file with no dependencies. Open `index.html` in a browser, or serve the
 - **Upgrades:** coins buy fire rate, volley (extra runners per shot) and giant charge and power.
 - **Progress:** saved in the browser (level, coins, upgrades, stars).
 - **New pieces** (each explained with a card when it first appears):
+  - Level 2: barricade
   - Level 4: shield gate (the runner's next clash costs it nothing)
   - Level 5: windmill (sweeping blades knock out runners from both sides)
   - Level 6: giant gate (runners become giants worth 6, limited uses)

@@ -127,6 +127,7 @@ const fmtN = n => { n = Math.max(0, Math.ceil(n)); return n >= 1e6 ? (n / 1e6).t
 
 // New pieces, in the order levels introduce them. Each gets an explainer the first time it appears.
 const PIECES = {
+  wall:    { lvl: 2, name: 'Barricade', text: 'A stack of crates that soaks up runners until its number hits zero. A bigger gate always waits behind it, so decide: go around, or punch through.' },
   shield:  { lvl: 4, name: 'Shield gate', text: 'Runners that pass through get a bubble. Their next clash costs them nothing.' },
   spinner: { lvl: 5, name: 'Windmill', text: 'Its blades sweep the causeway and knock out any runner they touch, yours or theirs. Time your stream between the blades.' },
   giantg:  { lvl: 6, name: 'Giant gate', text: 'Each runner that passes becomes a giant worth 6 runners. The gate breaks after a few uses.' },
@@ -221,15 +222,34 @@ function makeLevel(n) {
     for (const cx of spots) {
       const roll = r();
       let type = 'mul', k2 = 2;
-      if (roll < 0.15 + Math.min(n, 10) * 0.015 && k > 0) type = 'cut';
+      if (n >= 2 && two && k > 0 && k < rows - 1 && roll < 0.22 + Math.min(n, 10) * 0.015 && !gates.some(q => q.z === z && q.type === 'wall')) type = 'wall';
       else if (roll > 0.82) k2 = n >= 4 && r() < 0.35 ? 4 : 3;
-      gates.push({ z, c: cx, x: cx, w: two ? 0.62 : 0.6 + r() * 0.3, type, k: k2, move: n >= 3 && r() < 0.45 ? 0.25 + r() * 0.25 : 0, ph: r() * 6, sp: 0.6 + r() * 0.8, flash: 0, gain: 0, popT: 0 });
+      const hp = Math.round(8 * Math.pow(1.17, Math.min(n - 1, 16)) * (1 + n * 0.1));
+      gates.push({ z, c: cx, x: cx, w: two ? 0.62 : 0.6 + r() * 0.3, type, k: k2, hp, max: hp,
+        move: type === 'wall' ? 0 : n >= 3 && r() < 0.45 ? 0.25 + r() * 0.25 : 0, ph: r() * 6, sp: 0.6 + r() * 0.8, flash: 0, gain: 0, popT: 0 });
     }
+  }
+  // make sure barricades show up: always on their introduction level, usually after that
+  if (n >= 2 && rows >= 3 && !gates.some(g => g.type === 'wall') && (n === 2 || r() < 0.65)) {
+    const k = 1 + Math.floor(r() * (rows - 2)), z = rowZ[k], side = r() < 0.5 ? -1 : 1;
+    for (let i = gates.length - 1; i >= 0; i--) if (gates[i].z === z) gates.splice(i, 1);
+    const hp = Math.round(8 * Math.pow(1.17, Math.min(n - 1, 16)) * (1 + n * 0.1));
+    const base = { z, w: 0.62, k: 2, hp, max: hp, move: 0, ph: 0, sp: 0, flash: 0, gain: 0, popT: 0 };
+    gates.push(Object.assign({}, base, { c: side * 0.48, x: side * 0.48, type: 'wall' }), Object.assign({}, base, { c: -side * 0.48, x: -side * 0.48, type: 'mul' }));
+  }
+  // every barricade guards a bigger gate in the next row, on the same side
+  for (const w of gates.filter(g => g.type === 'wall')) {
+    const nextZ = rowZ[rowZ.indexOf(w.z) + 1];
+    const row = gates.filter(g => g.z === nextZ);
+    const behind = row.length === 1 ? row[0] : row.find(g => Math.sign(g.c) === Math.sign(w.c)) || row[0];
+    if (!behind) continue;
+    if (row.length === 1) { behind.c = behind.x = w.c; behind.w = Math.min(behind.w, 0.62); }
+    behind.type = 'mul'; behind.k = Math.max(behind.k, n >= 6 ? 4 : 3); behind.move = 0;
   }
   // one special gate per level (the new one on its introduction level), swapped in for an ordinary gate
   if (special.length) {
     const kind = newPiece && special.includes(newPiece) ? newPiece : special[Math.floor(r() * special.length)];
-    const cand = gates.filter(g => g.type === 'mul' && g.z < L - 7);
+    const cand = gates.filter(g => g.type === 'mul' && g.z < L - 7 && !gates.some(w => w.type === 'wall' && w.z < g.z && Math.abs(w.c - g.c) < 0.3));
     const g = cand[Math.floor(r() * cand.length)] || gates[0];
     g.type = kind; g.uses = kind === 'giantg' ? 6 + Math.floor(n / 4) : 0;
   }
@@ -272,7 +292,7 @@ function makeLevel(n) {
 // Rough multiplier for a shot aimed straight up column x (gates at their resting spots).
 function columnGrowth(gates, obstacles, x) {
   let m = 1;
-  for (const g of gates) if (Math.abs(x - g.c) <= g.w / 2) m *= g.type === 'cut' ? 0.5 : g.type === 'mul' ? g.k : 1.3;
+  for (const g of gates) if (Math.abs(x - g.c) <= g.w / 2) m *= g.type === 'wall' ? 0.85 : g.type === 'mul' ? g.k : 1.3;
   for (const o of obstacles) {
     if (o.kind === 'hole' && Math.abs(x - o.x) < o.w / 2 + R) m = 0;
     if (o.kind === 'spinner' && Math.abs(x - o.x) < o.len / 2 + 0.1) m *= 0.7;
@@ -424,13 +444,15 @@ function step(dt) {
     }
     B.x[i] += (B.vx[i] + steer) * dt;
     if (B.x[i] < -0.93 || B.x[i] > 0.93) { B.vx[i] = -B.vx[i]; B.x[i] = Math.max(-0.93, Math.min(0.93, B.x[i])); }
+    for (const g of lv.gates) {
+      if (g.type !== 'wall' || g.dead || !(z0 < g.z && z1 >= g.z) || Math.abs(B.x[i] - g.x) > g.w / 2) continue;
+      hitWall(g, B, i);
+    }
+    if (B.p[i] <= 0) continue;
     if (!big) for (const g of lv.gates) {
-      if (g.dead || !(z0 < g.z && z1 >= g.z) || (B.g[i] & g.bit) || Math.abs(B.x[i] - g.x) > g.w / 2) continue;
+      if (g.dead || g.type === 'wall' || !(z0 < g.z && z1 >= g.z) || (B.g[i] & g.bit) || Math.abs(B.x[i] - g.x) > g.w / 2) continue;
       B.g[i] |= g.bit; g.flash = 1;
-      if (g.type === 'cut') {
-        if (B.p[i] > 1) { B.p[i] = Math.ceil(B.p[i] / 2); }
-        else if (Math.random() < 0.5) { B.p[i] = 0; puff(B.x[i], g.z, '#ff4e6a', 2); }
-      } else if (g.type === 'mul') {
+      if (g.type === 'mul') {
         if (S.tut) S.tut.passed++;
         const extra = (g.k - 1) * B.p[i];
         if (B.n + g.k > SOFT_CAP) { B.p[i] *= g.k; }   // crowded: merge into a bigger runner
@@ -459,7 +481,10 @@ function step(dt) {
   // their runners drift toward your cannon
   for (let i = 0; i < Rd.n; i++) {
     if (Rd.p[i] <= 0) continue;
+    const rz0 = Rd.z[i];
     Rd.z[i] -= lv.redSpeed * dt;
+    for (const g of lv.gates) if (g.type === 'wall' && !g.dead && rz0 > g.z && Rd.z[i] <= g.z && Math.abs(Rd.x[i] - g.x) <= g.w / 2) hitWall(g, Rd, i);
+    if (Rd.p[i] <= 0) continue;
     Rd.x[i] += (Rd.vx[i] + (S.cx - Rd.x[i]) * 0.25) * dt; if (Rd.x[i] < -0.93 || Rd.x[i] > 0.93) Rd.vx[i] = -Rd.vx[i];
     if (hazardHits(Rd, i, Rd.z[i])) continue;
     if (Rd.z[i] <= 0.3) { S.wall -= Rd.p[i]; Rd.p[i] = 0; S.shake = Math.max(S.shake, 0.12); tone(140, 0.12, 'square', 0.03); buzz(15); }
@@ -536,6 +561,18 @@ function step(dt) {
   if (!S.over && S.base <= 0) { S.base = 0; S.over = 'win'; S.firing = false; towerFalls(); setTimeout(showWin, 1400); $('coach').hidden = true; }
   else if (!S.over && S.wall <= 0) { S.wall = 0; S.over = 'lose'; S.firing = false; tone(100, 0.8, 'sawtooth', 0.07); setTimeout(showLose, 1000); $('coach').hidden = true; }
   if (S.over === 'win') { for (let i = 0; i < Rd.n; i++) Rd.p[i] = Math.random() < dt * 3 ? (puff(Rd.x[i], Rd.z[i], '#ffffff', 3), 0) : Rd.p[i]; }
+}
+
+function hitWall(g, P, i) {
+  const m = Math.min(P.p[i], g.hp);
+  g.hp -= m; P.p[i] -= m; g.flash = 1;
+  if (Math.random() < 0.3) puff(P.x[i], g.z, '#c98a4b', 2);
+  if (Math.random() < 0.4) tone(180 + Math.random() * 60, 0.04, 'square', 0.015);
+  if (g.hp <= 0) {
+    g.dead = true; S.shake = Math.max(S.shake, 0.2);
+    puff(g.x, g.z, '#c98a4b', 22); tone(120, 0.3, 'sawtooth', 0.06); buzz(25);
+    if (P === B) { S.coinsEarned += 3; floatText(g.x, g.z, 'Smashed! +● 3', '#ffc63a', 18); }
+  }
 }
 
 function clash(i, j) {
@@ -680,17 +717,37 @@ function label(text, x, y, size, color) {
 }
 
 const GATE_LOOK = {
-  mul: ['rgba(127,231,255,', '#2b6f8a', '#7fe7ff'], cut: ['rgba(255,78,106,', '#8e1f37', '#ff4e6a'],
+  mul: ['rgba(127,231,255,', '#2b6f8a', '#7fe7ff'],
   shield: ['rgba(159,180,255,', '#3d4fa8', '#9fb4ff'], speed: ['rgba(255,236,110,', '#8a7a12', '#ffec6e'], giantg: ['rgba(255,198,58,', '#9c5e10', '#ffc63a'],
 };
 function drawGate(g) {
+  if (g.type === 'wall') return drawWall(g);
   const x0 = g.x - g.w / 2, x1 = g.x + g.w / 2, h = 0.55, z = g.z, [glass, post, top] = GATE_LOOK[g.type];
   for (const xx of [x0, x1]) quad(P(xx - 0.025, z), P(xx + 0.025, z), P(xx + 0.025, z, h + 0.05), P(xx - 0.025, z, h + 0.05), post);
   quad(P(x0, z, 0.02), P(x1, z, 0.02), P(x1, z, h), P(x0, z, h), glass + (0.38 + g.flash * 0.35) + ')');
   quad(P(x0, z, h - 0.06), P(x1, z, h - 0.06), P(x1, z, h), P(x0, z, h), top);
   const c = P(g.x, z, h * 0.5), s = PS(z), fs = Math.max(12, s * 0.26 * (1 + g.flash * 0.15));
-  const text = g.type === 'cut' ? '÷2' : g.type === 'mul' ? '×' + g.k : g.type === 'shield' ? 'SHIELD' : g.type === 'speed' ? 'SPRINT' : `GIANT ${g.uses}`;
-  label(text, c[0], c[1], g.type === 'mul' || g.type === 'cut' ? fs : fs * 0.62, g.type === 'cut' ? '#ffd1d9' : '#ffffff');
+  const text = g.type === 'mul' ? '×' + g.k : g.type === 'shield' ? 'SHIELD' : g.type === 'speed' ? 'SPRINT' : `GIANT ${g.uses}`;
+  label(text, c[0], c[1], g.type === 'mul' ? fs : fs * 0.62, '#ffffff');
+}
+// barricade: crates that shrink as they take damage, with the remaining strength on top
+function drawWall(g) {
+  const x0 = g.x - g.w / 2, z = g.z, frac = Math.max(0, g.hp / g.max), h = 0.18 + 0.32 * frac, cols = 4, cw = g.w / cols;
+  const jig = g.flash && fxOn() ? (Math.random() - 0.5) * 0.015 : 0;
+  for (let row = 0; row < 2; row++) {
+    const y0 = row * h / 2, y1 = y0 + h / 2;
+    for (let k = 0; k < cols; k++) {
+      if (row === 1 && frac < 0.5 && (k === 0 || k === cols - 1)) continue; // top corners knocked off
+      const a = x0 + k * cw + 0.008 + jig, b = a + cw - 0.016;
+      quad(P(a, z, y0), P(b, z, y0), P(b, z, y1 - 0.01), P(a, z, y1 - 0.01), g.flash > 0.5 ? '#e7b27a' : '#c98a4b');
+      quad(P(a, z, y1 - 0.01), P(b, z, y1 - 0.01), P(b, z + 0.12, y1 - 0.01), P(a, z + 0.12, y1 - 0.01), '#e0a96b');
+      ctx.strokeStyle = '#7a4a22'; ctx.lineWidth = Math.max(1, PS(z) * 0.012);
+      const p1 = P(a, z, y0), p2 = P(b, z, y1 - 0.01), p3 = P(b, z, y0), p4 = P(a, z, y1 - 0.01);
+      ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.moveTo(p3[0], p3[1]); ctx.lineTo(p4[0], p4[1]); ctx.stroke();
+    }
+  }
+  const c = P(g.x, z, h + 0.16);
+  label(fmtN(g.hp), c[0], c[1], Math.max(13, PS(z) * 0.24), '#ffe2c2');
 }
 function drawHole(o) {
   const x0 = o.x - o.w / 2, x1 = o.x + o.w / 2, z0 = o.z - o.d / 2, z1 = o.z + o.d / 2;
@@ -860,6 +917,17 @@ function drawPreview(c, k) {
   g.fillStyle = '#d8cab6'; g.beginPath(); g.roundRect ? g.roundRect(10, 10, s - 20, s - 20, 24) : g.rect(10, 10, s - 20, s - 20); g.fill();
   const runner = (x, y, size, spr = SPR.mint) => g.drawImage(spr, x - size / 2, y - size / 2, size, size);
   const text = (t, x, y, size, col) => { g.font = `800 ${size}px "Baloo 2", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 5; g.strokeStyle = '#1b1430'; g.strokeText(t, x, y); g.fillStyle = col; g.fillText(t, x, y); };
+  if (k === 'wall') {
+    for (let row = 0; row < 2; row++) for (let i = 0; i < 4; i++) {
+      const x = 44 + i * 38, y = 120 - row * 32;
+      g.fillStyle = '#c98a4b'; g.fillRect(x, y, 34, 30); g.strokeStyle = '#7a4a22'; g.lineWidth = 3;
+      g.strokeRect(x, y, 34, 30); g.beginPath(); g.moveTo(x, y); g.lineTo(x + 34, y + 30); g.moveTo(x + 34, y); g.lineTo(x, y + 30); g.stroke();
+    }
+    text('24', 120, 70, 30, '#ffe2c2');
+    g.fillStyle = 'rgba(127,231,255,.55)'; g.fillRect(60, 22, 120, 26); text('×3', 120, 36, 22, '#fff');
+    runner(96, 190, 40); runner(144, 190, 40);
+    return;
+  }
   if (k in GATE_LOOK) {
     const [glass, post, top] = GATE_LOOK[k];
     g.fillStyle = glass + '.5)'; g.fillRect(40, 70, 160, 70); g.fillStyle = top; g.fillRect(40, 64, 160, 10); g.fillStyle = post; g.fillRect(36, 64, 8, 80); g.fillRect(196, 64, 8, 80);
